@@ -1,25 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # ファイルパスリストを作成。
-#     画像とアノテーション
-
-# In[1]:
-
-
-# pip install opencv-python --trusted-host pypi.python.org
-
-
-# In[1]:
-
-
-# import stuff
 import os
 import numpy as np
 
 import torch
 import torch.utils.data as data
-
+import xml.etree.ElementTree as ET
+import cv2
 
 def make_datapath_list(rootpath):
     img_path_template = os.path.join(rootpath, "JPEGImages", "%s.jpg")
@@ -50,15 +38,6 @@ def make_datapath_list(rootpath):
             val_anno_list.append(anno_path)
         
     return train_img_list, train_anno_list, val_img_list, val_anno_list
-
-
-# アノテーションファイルをリストに読み込む
-
-# In[4]:
-
-
-import xml.etree.ElementTree as ET
-import cv2
 
 class Anno_xml2list(object):
     def __init__(self, classes):
@@ -103,9 +82,6 @@ class Anno_xml2list(object):
             ret += [bndbox]
         return np.asarray(ret)
 
-
-# フォルダ「utils」にあるdata_augumentation.pyからimport。
-# 入力画像の前処理をするクラス
 from utils.data_augumentation import Compose, ConvertFromInts, ToAbsoluteCoords, PhotometricDistort, Expand, RandomSampleCrop, RandomMirror, ToPercentCoords, Resize, SubtractMeans
 from torchvision import transforms
 
@@ -117,24 +93,21 @@ class Normalize(object):
     def __call__(self, image, boxes=None, labels=None):
         image = image.astype(np.float32)/255
         axis = (0,1)
-        #print("mean before norm", np.mean(image.astype(np.float32), axis=axis))
-        #print("std before norm", np.std(image.astype(np.float32), axis=axis))
         image -= self.mean
         image /= self.std
-        #print("mean after norm", np.mean(image.astype(np.float32), axis=axis))
-        #print("std after norm", np.std(image.astype(np.float32), axis=axis))
         return image, boxes, labels
 
 class DatasetTransform():
-    def __init__(self, input_size, color_mean):
+    def __init__(self, input_size):
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
+        mean=(100,100,100) # for expanding
         self.data_transform = {
         "train": Compose([
             ConvertFromInts(),  # intをfloat32に変換
             ToAbsoluteCoords(),  # アノテーションデータの規格化を戻す
             PhotometricDistort(),  # 画像の色調などをランダムに変化
-            Expand(color_mean),  # 画像のキャンバスを広げる
+            Expand(mean),  # 画像のキャンバスを広げる
             RandomSampleCrop(),  # 画像内の部分をランダムに抜き出す
             RandomMirror(),  # 画像を反転させる
             ToPercentCoords(),  # アノテーションデータを0-1に規格化
@@ -174,14 +147,6 @@ class COCODatasetTransform():
         }
     def __call__(self, img, phase, boxes, labels):
         return self.data_transform[phase](img, boxes, labels)        
-
-
-# In[7]:
-
-
-# # create dataset loader.
-
-# In[21]:
 
 
 class VOCDataset(data.Dataset):
@@ -244,28 +209,6 @@ class VOCDataset(data.Dataset):
         
         return img, gt, width, height
         
-
-
-# In[27]:
-
-
-# ## データセット作成の戦略について
-# data.datasetクラスを作り、getすると画像とtargetを出力するように。
-# このクラスはデータローディングや前処理などを定義する必要がある。
-# 
-# ↓
-# 
-# 次にdata.dataloaderにdata.datasetを入力し、シャッフルやミニバッチの機能を実現する。
-# 
-# ↓
-# 
-# 学習時はiter(data.dataloader)からデータを引っ張ってきて動かす。
-
-# # make dataloader
-
-# In[34]:
-
-
 # サイズを変化させる関数
 def od_collate_fn(batch):
     """
