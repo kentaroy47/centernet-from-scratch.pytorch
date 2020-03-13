@@ -292,6 +292,112 @@ class SSDPredictShow(nn.Module):
             currentAxis.text(xy[0], xy[1], display_txt, bbox={
                              'facecolor': color, 'alpha': 0.5})
 
+def vis_bbox(rgb_img, bbox, label_index, scores, label_names):
+        """
+        物体検出の予測結果を画像で表示させる関数。
+
+        Parameters
+        ----------
+        rgb_img:rgbの画像
+            対象の画像データ
+        bbox: list
+            物体のBBoxのリスト
+        label_index: list
+            物体のラベルへのインデックス
+        scores: list
+            物体の確信度。
+        label_names: list
+            ラベル名の配列
+
+        Returns
+        -------
+        なし。rgb_imgに物体検出結果が加わった画像が表示される。
+        """
+
+        # 枠の色の設定
+        num_classes = len(label_names)  # クラス数（背景のぞく）
+        colors = plt.cm.hsv(np.linspace(0, 1, num_classes)).tolist()
+
+        # 画像の表示
+        plt.figure(figsize=(10, 10))
+        plt.imshow(rgb_img)
+        currentAxis = plt.gca()
+
+        # BBox分のループ
+        for i, bb in enumerate(bbox):
+
+            # ラベル名
+            label_name = label_names[int(label_index[i])]
+            color = colors[int(label_index[i])]  # クラスごとに別の色の枠を与える
+
+            # 枠につけるラベル　例：person;0.72　
+            if scores is not None:
+                sc = scores[i]
+                display_txt = '%s: %.2f' % (label_name, sc)
+            else:
+                display_txt = '%s: ans' % (label_name)
+
+            # 枠の座標
+            xy = (bb[0], bb[1])
+            width = bb[2] - bb[0]
+            height = bb[3] - bb[1]
+
+            # 長方形を描画する
+            currentAxis.add_patch(plt.Rectangle(
+                xy, width, height, fill=False, edgecolor=color, linewidth=2))
+
+            # 長方形の枠の左上にラベルを描画する
+            currentAxis.text(xy[0], xy[1], display_txt, bbox={
+                             'facecolor': color, 'alpha': 0.5})
+
+# wrap to function..
+def show_detection(img, hm, regr, thresh=0.7, input_size=256):
+    hm = F.sigmoid(torch.from_numpy(hm)).numpy()
+    print(hm.shape)
+    where = np.where(hm > thresh)
+
+    # center = [xmin,ymin, y, class, score]
+    # box = xmin, ymin, xmax, ymax, class, score
+    clss = np.asarray(where[0])
+    xs = np.asarray(where[1])
+    ys = np.asarray(where[2])
+
+    center = []; box = []
+    for y,x,cls in zip(xs, ys, clss):
+        score = hm[cls,x,y]
+        w, h = regr[:, x, y] * input_size//MODEL_SCALE
+        print(w)
+        print(h)
+
+        box.append(np.asarray([x-w/2,y-h/2,x+w/2,y+h/2,cls,score]))
+        center.append(np.asarray([x,y,cls,score]))
+
+    center = np.asarray(center)
+    box = np.asarray(box)
+
+    # scale box scale to original image
+    box[:, 0:4] *= MODEL_SCALE
+    center[:, 0:2] *= MODEL_SCALE
+    
+    # Let's see if the center is encoded right
+    img2 = cv2.resize(img, (input_size, input_size))
+    img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
+
+    # plot stuff centers
+    for c in center:
+        img2 = cv2.circle(img2, (int(c[0]), int(c[1])), 20, (255, 0, 0), 5)
+
+    print("plot center points")
+    plt.imshow(img2/255)
+    plt.show()
+    
+    # plot boxes
+    # Let's see if the center is encoded right
+    img2 = cv2.resize(img, (input_size, input_size))
+    img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
+
+    vis_bbox(img2, box, label_index=box[:,4], scores=box[:,5], label_names=voc_classes)
+            
 from utils.ssd import Detect_Flip
 
 class SSDPredictShowFlip(nn.Module):
