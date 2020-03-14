@@ -2,4 +2,7 @@
 A simplifed and unofficial implementation of centernet
 
 # Training on VOC
-see `train_centernet_v2.ipynb`
+see `train_centernet.ipynb`
+
+# For inference
+run `eval.ipynb`
